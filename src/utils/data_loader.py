@@ -256,7 +256,8 @@ class SiamesePatchDataset(_DatasetBase):
 
     def _load_random_patch(self, idx):
         import torch
-        residual = np.load(self.residual_paths[idx])
+        _f = np.load(self.residual_paths[idx])
+        residual = _f['residual'].astype(np.float16) if 'residual' in _f else _f
         patches = extract_patches(residual, patch_size=self.patch_size,
                                   max_patches=1,
                                   random_state=self.rng.randint(0, 2**31))

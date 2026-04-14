@@ -2,7 +2,7 @@
 PRNU Noise Residual Pre-extraction Script
 ===========================================
 
-Pre-computes and caches noise residuals to .npy files for fast
+Pre-computes and caches noise residuals to .npz files for fast
 training and evaluation. Run this once after datasets are downloaded.
 
 Usage
@@ -41,7 +41,7 @@ def process_single_image(
 ) -> str | None:
     """Extract and save noise residual for a single image.
 
-    Returns the output .npy path, or None on failure.
+    Returns the output .npz path, or None on failure.
     """
     try:
         img = cv2.imread(image_path)
@@ -53,12 +53,15 @@ def process_single_image(
 
         # Create output path preserving directory structure
         img_path = Path(image_path)
-        rel_name = img_path.stem + ".npy"
+        rel_name = img_path.stem + ".npz"
         device_dir = output_dir / img_path.parent.name
         device_dir.mkdir(parents=True, exist_ok=True)
         out_path = device_dir / rel_name
 
-        np.save(out_path, residual.astype(np.float32))
+        if out_path.exists():
+            return str(out_path)
+
+        np.savez_compressed(out_path, residual=residual.astype(np.float16))
         return str(out_path)
 
     except Exception as e:
@@ -121,9 +124,9 @@ def precompute_residuals(
     # Save index mapping
     index_path = output_dir / "residual_index.json"
     index = {}
-    for npy_file in output_dir.rglob("*.npy"):
-        rel = str(npy_file.relative_to(output_dir))
-        device = npy_file.parent.name
+    for npz_file in output_dir.rglob("*.npz"):
+        rel = str(npz_file.relative_to(output_dir))
+        device = npz_file.parent.name
         index.setdefault(device, []).append(rel)
 
     with open(index_path, "w") as f:
