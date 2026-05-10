@@ -1,0 +1,3 @@
+# This directory contains raw image data (symlinked or downloaded).
+# Never commit actual image files — they are too large for git.
+# Use data/scripts/ to download datasets.
