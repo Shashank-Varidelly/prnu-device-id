@@ -31,11 +31,7 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
-# Model artifacts
-checkpoints/
-*.pth
-*.pt
-*.onnx
+
 
 # Experiment tracking
 mlruns/

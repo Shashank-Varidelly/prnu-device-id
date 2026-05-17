@@ -1,6 +1,7 @@
 import json, torch, sys
 import numpy as np
 from pathlib import Path
+sys.path.insert(0, ".") 
 sys.path.insert(0, "src")
 from algorithms.cnn_classifier import PRNUResNet, train_one_epoch, evaluate, save_checkpoint
 from utils.data_loader import PatchDataset, extract_patches
@@ -71,6 +72,14 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
 best_val_acc = 0.0
+start_epoch = 1
+if CKPT_PATH.exists():
+    ckpt        = torch.load(str(CKPT_PATH), map_location=device)
+    model.load_state_dict(ckpt["model_state_dict"])
+    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+    best_val_acc = ckpt["metrics"].get("val_acc", 0.0)
+    start_epoch  = ckpt.get("epoch", 0) + 1
+    print(f"Resuming from epoch {start_epoch}, best_val_acc={best_val_acc:.3f}")
 for epoch in range(1, EPOCHS + 1):
     tr = train_one_epoch(model, train_loader, optimizer, device)
     vl = evaluate(model, val_loader, device)

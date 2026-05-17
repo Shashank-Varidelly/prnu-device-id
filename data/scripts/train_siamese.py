@@ -1,27 +1,29 @@
 import json, torch, sys
 import numpy as np
 from pathlib import Path
+sys.path.insert(0, ".") 
 sys.path.insert(0, "src")
 from algorithms.siamese_network import SiameseNetwork, train_siamese_epoch, extract_embeddings
 from algorithms.cnn_classifier import save_checkpoint
 from utils.data_loader import SiamesePatchDataset, PatchDataset, extract_patches
 from torch.utils.data import DataLoader
 
-SPLITS      = "data/splits_demo.json"
-RES_DIR     = Path("data/processed/residuals/dresden")
+SPLITS  = "/content/splits_demo.json"
+RES_DIR = Path("/content/residuals/dresden")
 CKPT_DIR    = Path("checkpoints"); CKPT_DIR.mkdir(exist_ok=True)
 CKPT_PATH   = CKPT_DIR / "siamese_best.pth"
 GALLERY_EMB = Path("data/processed/gallery_embeddings.npy")
 GALLERY_LBL = Path("data/processed/gallery_labels.json")
 PATCH_SIZE  = 128
-PAIRS_EPOCH = 4000
+PAIRS_EPOCH = 8000
 BATCH       = 32
-EPOCHS      = 5
+EPOCHS      = 4
 EMBED_DIM   = 128
 MARGIN      = 1.0
+DEVICES = ["Canon_Ixus55_0", "Canon_Ixus70_0", "Nikon_CoolPixS710_0", "Nikon_D200"]
 
 splits = json.loads(open(SPLITS).read())
-devices = sorted(splits["dresden"]["train"].keys())
+devices = DEVICES
 device_to_idx = {d: i for i, d in enumerate(devices)}
 print("Devices:", devices)
 
@@ -29,6 +31,8 @@ def build_lists(split_dict, res_dir, device_to_idx):
     res_dir = Path(res_dir)
     paths, labels = [], []
     for device, img_paths in split_dict.items():
+        if device not in device_to_idx:
+          continue
         lbl = device_to_idx[device]
         for img_path in img_paths:
             stem = Path(img_path).stem
@@ -68,15 +72,22 @@ if len(train_paths) == 0:
 
 train_ds   = NpzSiameseDataset(train_paths, train_labels, patch_size=PATCH_SIZE, pairs_per_epoch=PAIRS_EPOCH)
 gallery_ds = NpzPatchDataset(train_paths, train_labels, patch_size=PATCH_SIZE, patches_per_image=4)
-train_loader   = DataLoader(train_ds,   batch_size=BATCH, shuffle=True,  num_workers=2)
-gallery_loader = DataLoader(gallery_ds, batch_size=64,    shuffle=False, num_workers=2)
-
+train_loader   = DataLoader(train_ds,   batch_size=BATCH, shuffle=True,  num_workers=4, pin_memory=True)
+gallery_loader = DataLoader(gallery_ds, batch_size=256,   shuffle=False, num_workers=4, pin_memory=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Training on:", device)
 model = SiameseNetwork(in_channels=1, embedding_dim=EMBED_DIM, pretrained=True).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 best_loss = float("inf")
+start_epoch = 1
+if CKPT_PATH.exists():
+    ckpt        = torch.load(str(CKPT_PATH), map_location=device)
+    model.load_state_dict(ckpt["model_state_dict"])
+    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+    best_loss   = ckpt["metrics"].get("loss", float("inf"))
+    start_epoch = ckpt.get("epoch", 0) + 1
+    print(f"Resuming from epoch {start_epoch}, best_loss={best_loss:.4f}")
 for epoch in range(1, EPOCHS + 1):
     result = train_siamese_epoch(model, train_loader, optimizer, device, MARGIN)
     loss = result["loss"]
